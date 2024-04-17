@@ -36,6 +36,62 @@ struct DP__DEVICE_ID {
   unsigned int Version_ID : 4;
 };
 
+typedef union {
+    struct {
+        uint8_t low : 8;
+        uint8_t high : 8;
+    } parts;
+    uint16_t value;
+} DP__FIFO_I_SET;
+
+typedef union {
+    struct {
+      // uint8_t MessageType : 5;
+      // uint8_t PortDataRole : 1;
+      // uint8_t SpecificationReversio : 2;
+      // uint8_t PortPowerRole : 1;
+      // uint8_t MessageID : 3;
+      // uint8_t NumberOfDataObjects : 3;
+      // uint8_t Extended : 1;
+
+      uint8_t Extended : 1;
+      uint8_t NumberOfDataObjects : 3;
+      uint8_t MessageID : 3;
+      uint8_t PortPowerRole : 1;
+
+      uint8_t MessageType : 5;
+      uint8_t PortDataRole : 1;
+      uint8_t SpecificationReversio : 2;
+    } parts;
+    struct {
+      uint8_t high : 8;
+      uint8_t low : 8;
+    } high_low;
+    uint16_t value;
+} DP__HEADER_SOP;
+
+typedef union {
+    struct {
+        uint8_t low : 8;
+        uint8_t high : 8;
+    } parts;
+    uint16_t value;
+} DP__FIFO_V_SET;
+
+// typedef struct {
+//   uint8_t high : 8;
+//   uint8_t low : 8;
+// };
+
+// struct DP__I_SET {
+//   uint8_t high : 8;
+//   uint8_t low : 8;
+// };
+
+struct DP__V_SET {
+  unsigned int high : 4;
+  unsigned int low : 6;
+};
 
 /**
  * (Address: 02h; Reset Value: 0x0000_0011; Type: Read/Write)

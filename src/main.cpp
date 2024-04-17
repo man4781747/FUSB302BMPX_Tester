@@ -6,8 +6,23 @@
 void i2c_scanner();
 
 u_int8_t FIFO_buffer[200];
+u_int8_t FIFO_TX_buffer[20];
 int FIFO_Len;
 uint8_t I2C_RequestsByteBuffer;
+
+const u_int8_t PD_request[14] = {
+  /**
+   * https://www.usbzh.com/article/detail-732.html
+   * SOP 指令下法: Sync−1 Sync−1 Sync−1 Sync−2
+   * 
+   */
+  0x12, 0x12, 0x12, 0x13,
+  0x86,
+  0x42, 0b00010100,
+  0x00, 0x00, 0x00, 0x03,
+  0xff, 0x14, 0xA1
+};
+
 
 String getBitString(u_int8_t val){
   String data = "";
@@ -21,6 +36,12 @@ String getBitString(u_int8_t val){
     val = val << 1;
   }
   return data;
+}
+
+String getBitString(u_int16_t val){
+  String Low = getBitString(*(uint8_t *)(&val+1));
+  String High = getBitString(*(uint8_t *)&val);
+  return High+Low;
 }
 
 void setup() {
@@ -70,60 +91,93 @@ void setup() {
 
 void loop() {
   u_int8_t FIFO;
+  DP__HEADER_SOP PD_Header;
   FUSB302BMPX.GetMemeryData(&FIFO, ADDR_FIFOs);
-  Serial.printf("FIFO:\t%s\n", getBitString(FIFO).c_str());
+  // Serial.printf("FIFO:\t%s\n", getBitString(FIFO).c_str());
   FIFO_buffer[0] = FIFO & 0xE0;
+  // Serial.printf("FIFO_buffer[1]:\t%s\n", getBitString(FIFO_buffer[1]).c_str());
   if (FIFO_buffer[0] > 0x40) {
+    if (FIFO_buffer[0] == 0b11100000) {
+      // Serial.printf(" SOP 訊息\n");
+    }
+    else {
+      Serial.printf(" 尚未定義的FIFO資訊\n");
+    }
     Wire.beginTransmission(FUSB302BMPX_ADDR);
     Wire.write(ADDR_FIFOs);
     Wire.endTransmission();
     Wire.requestFrom(FUSB302BMPX_ADDR,2);
-    Wire.readBytes(FIFO_buffer + 2, 2);
+    Wire.readBytes(FIFO_buffer + 1, 2);
+    PD_Header.high_low.high = FIFO_buffer[1];
+    PD_Header.high_low.low = FIFO_buffer[2];
     uint8_t i = 0;
-    Serial.printf("SET:\t%s\n", getBitString(FIFO_buffer[2]).c_str());
-    i = FIFO_buffer[2] % 0x70;
-    i >>= 2;
-    Serial.printf("獲得 %d 組電壓設定\n", i);
-    i += 2;
-    FIFO_Len = i + 3;
+    // Serial.printf("Header:\t%s-%s\n", getBitString(FIFO_buffer[2]).c_str(), getBitString(FIFO_buffer[1]).c_str());
+    // Serial.printf("MessageType: %s\n", getBitString(PD_Header.parts.MessageType).c_str());
+    // Serial.printf("PortDataRole: %s\n", getBitString(PD_Header.parts.PortDataRole).c_str());
+    // Serial.printf("SpecificationReversio: %s\n", getBitString(PD_Header.parts.SpecificationReversio).c_str());
+    // Serial.printf("PortPowerRole: %s\n", getBitString(PD_Header.parts.PortPowerRole).c_str());
+    Serial.printf("MessageID: %d\t",(int)PD_Header.parts.MessageID);
+    Serial.printf("NumberOfDataObjects: %d\n", (int)PD_Header.parts.NumberOfDataObjects);
+    // Serial.printf("Extended: %s\n", getBitString(PD_Header.parts.Extended).c_str());
+    
+    // i = FIFO_buffer[2] % 0x70;
+    // Serial.printf("FIFO_buffer[2]: %d, ", i);
+    // i >>= 2;
+    Serial.printf("獲得 %d 組電壓設定, 合計需要讀取 %d 個Byte\n", PD_Header.parts.NumberOfDataObjects, PD_Header.parts.NumberOfDataObjects+2);
+    // i += 2;
+    FIFO_Len = PD_Header.parts.NumberOfDataObjects + 5;
     Wire.beginTransmission(FUSB302BMPX_ADDR);
     Wire.write(ADDR_FIFOs);
     Wire.endTransmission();
-    Wire.requestFrom(FUSB302BMPX_ADDR, (int)i);
-    Wire.readBytes(FIFO_buffer+3, i);
+    Wire.requestFrom(FUSB302BMPX_ADDR, (int)PD_Header.parts.NumberOfDataObjects+2);
+    Wire.readBytes(FIFO_buffer+3, (int)PD_Header.parts.NumberOfDataObjects+2);
+    
+    //! 清除
     Wire.beginTransmission(FUSB302BMPX_ADDR);
     Wire.write(0x07);  
     Wire.write(0x04);
     Wire.endTransmission();
     
-    uint16_t I_set = 0, V_set = 0;
-    for (int setChose = 0;setChose<i-2;setChose++) {
-      Serial.printf("A:\t%s\n", getBitString(FIFO_buffer[4*setChose + 3]).c_str());
-      Serial.printf("B:\t%s\n", getBitString(FIFO_buffer[4*setChose + 4]).c_str());
-      Serial.printf("C:\t%s\n", getBitString(FIFO_buffer[4*setChose + 5]).c_str());
-      Serial.printf("D:\t%s\n", getBitString(FIFO_buffer[4*setChose + 6]).c_str());
+    // // uint16_t V_set = 0;
+    DP__FIFO_I_SET I_set;
+    DP__FIFO_V_SET V_set;
+    for (int setChose = 0;setChose<(i-2)/4;setChose++) {
       uint8_t A_set = FIFO_buffer[4*setChose + 3];
       uint8_t B_set = FIFO_buffer[4*setChose + 4];
       uint8_t C_set = FIFO_buffer[4*setChose + 5];
-      *((uint8_t *)&I_set+1) = A_set;
-      *((uint8_t *)&I_set) = B_set & 0x03;
-      *((uint8_t *)&V_set+1) = B_set & 0xFC;
-      *((uint8_t *)&V_set) = C_set & 0x0F;
-      V_set >>= 2;
-      V_set *= 5;
-      Serial.printf(" %d - V: %d,I: %d\n", setChose, V_set, I_set);
+      uint8_t D_set = FIFO_buffer[4*setChose + 6];
+      if (D_set & 0xC0 == 0b11000000) {
+        Serial.printf(" - 第 %d 組設定為 pps 可編成調整\n", setChose);
+        I_set.value = A_set & 0x7F;
+        I_set.value >>= 1;
+        Serial.printf("    電流值: %d ", I_set.value);
+        Serial.printf("    最小電壓: %d ", B_set);
+        Serial.printf("    最大電壓: %d \n", C_set >> 1);
+      }
+      else if ((int)(D_set & 0xC0) == 0) {
+        Serial.printf(" - 第 %d 組設定為固定值: ", setChose);
+        I_set.parts.low = A_set;
+        I_set.parts.high = B_set & 0x03;
+        V_set.parts.low = B_set & 0xFC;
+        V_set.parts.high = C_set & 0x0F;
+        V_set.value >>= 2;
+        V_set.value *= 5;
+        Serial.printf(" V: %d V,I: %d mA\n", V_set.value/100, I_set.value*10);
+      }
+      else {
+        Serial.printf(" - 第 %d 組設定為未知狀態\n", setChose);
+      }
     }
 
-
-
+    for (int i = 0;i < 14; i++) {
+      FIFO_TX_buffer[i] = PD_request[i];
+    }
+     
 
 
   }
 
-  // Wire.beginTransmission(FUSB302BMPX_ADDR);
-  // Wire.write(0x07);  
-  // Wire.write(0x04);
-  // Wire.endTransmission();
+
 
   u_int8_t test_i = 0;
   if (FIFO_Len >= 5) {
@@ -157,15 +211,16 @@ void loop() {
     else {
       Serial.println(" - 數據類消息");
       Serial.printf("test:\t%s\n", getBitString(FIFO_buffer[1]).c_str());
-      // test_i = FIFO_buffer[1] % 0x07;
-      // if (test_i == 0x01) {
-
-      // }
+      test_i = FIFO_buffer[1] & 0x07;
+      Serial.println(test_i);
+      if ((int)test_i == (int)0x01) {
+        Serial.printf("充店頭支持功能\n");
+      }
     }
   }
 
 
-  delay(1*1000);
+  delay(1*100);
 
   // FUSB302BMPX.ResetI2CSetting();
   // FUSB302BMPX.MeasureCCs();
