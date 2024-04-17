@@ -34,8 +34,11 @@ class C_FUSB302BMPX
     DP__STATUS1 GetStatus1();
     DP__INTERRUPT GetInterupt();
 
+    void HeaderResp(DP__HEADER_SOP header);
+
     void SendHardReset(); //! 最高級別重製
     void ResetI2CSetting();
+    void ClearFIFO_Rx();
     void OpenAllPower();
     void OpenAllAutoRetry();
     void OpenUsefulInterrupt();

@@ -46,27 +46,22 @@ typedef union {
 
 typedef union {
     struct {
-      // uint8_t MessageType : 5;
-      // uint8_t PortDataRole : 1;
-      // uint8_t SpecificationReversio : 2;
-      // uint8_t PortPowerRole : 1;
-      // uint8_t MessageID : 3;
-      // uint8_t NumberOfDataObjects : 3;
-      // uint8_t Extended : 1;
-
-      uint8_t Extended : 1;
-      uint8_t NumberOfDataObjects : 3;
-      uint8_t MessageID : 3;
-      uint8_t PortPowerRole : 1;
-
+      // 低位
       uint8_t MessageType : 5;
       uint8_t PortDataRole : 1;
       uint8_t SpecificationReversio : 2;
+      // 高位
+      // 低位
+      uint8_t PortPowerRole : 1;
+      uint8_t MessageID : 3;
+      uint8_t NumberOfDataObjects : 3;
+      uint8_t Extended : 1;
+      // 高位
     } parts;
     struct {
-      uint8_t high : 8;
-      uint8_t low : 8;
-    } high_low;
+      uint8_t Index_1 : 8;
+      uint8_t Index_2 : 8;
+    } IndexSort;
     uint16_t value;
 } DP__HEADER_SOP;
 
@@ -78,15 +73,39 @@ typedef union {
     uint16_t value;
 } DP__FIFO_V_SET;
 
-// typedef struct {
-//   uint8_t high : 8;
-//   uint8_t low : 8;
-// };
+// typedef union {
+//   struct {
+//     // 低位
+//     uint32_t SOP : 32 = 0x12121213;
+//     uint8_t DataInfo : 8 = 0x86; // 0x80 + 資料Byte數
+//     uint8_t Header_Index1 : 8 = 0b01000010;
+//     uint8_t Header_Index2_a : 4 = 0b0001;
+//     uint8_t MessageID : 3 = 0;
+//     uint8_t Header_Index2_b : 1 = 0b1;
+//     uint16_t I_Set : 10;
+//     uint16_t V_Set : 10;
+//     uint16_t NC_1 : 12 = 0;
+//     uint8_t JAM_CRC: 8 = 0xff;
+//     uint8_t EOP: 8 = 0x14;
+//     uint8_t TXON: 8 = 0xA1;
+//     // 高位
+//   } parts;
+// } DP__REQUEST__POWER;
 
-// struct DP__I_SET {
-//   uint8_t high : 8;
-//   uint8_t low : 8;
-// };
+struct DP__REQUEST__POWER {
+  uint32_t SOP : 32 = 0x13121212;
+  uint8_t DataInfo : 8 = 0x86; // 0x80 + 資料Byte數
+  uint8_t Header_Index1 : 8 = 0b01000010;
+  uint8_t Header_Index2_a : 4 = 0b0001;
+  uint8_t MessageID : 3 = 0;
+  uint8_t Header_Index2_b : 1 = 0;
+  uint16_t I_Set : 10;
+  uint16_t V_Set : 10;
+  uint16_t NC_1 : 12 = 0;
+  uint8_t JAM_CRC: 8 = 0xff;
+  uint8_t EOP: 8 = 0x14;
+  uint8_t TXON: 8 = 0xA1;
+};
 
 struct DP__V_SET {
   unsigned int high : 4;

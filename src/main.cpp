@@ -5,7 +5,7 @@
 
 void i2c_scanner();
 
-u_int8_t FIFO_buffer[200];
+u_int8_t FIFO_buffer[40] = {0};
 u_int8_t FIFO_TX_buffer[20];
 int FIFO_Len;
 uint8_t I2C_RequestsByteBuffer;
@@ -17,10 +17,13 @@ const u_int8_t PD_request[14] = {
    * 
    */
   0x12, 0x12, 0x12, 0x13,
-  0x86,
-  0x42, 0b00010100,
+  0x86,       // 0x80 + 資料Byte數
+  0b01000010, // 01(PD2.0) 0(發送訊息的是Sink耗电方) 00010(Request 请求供电)
+  0b00010100, // 0(不是Extended) 001(內含N筆資料，N*4Byte) 010(Message ID) 0(PortPowerRole 發送訊息的是UFP)
   0x00, 0x00, 0x00, 0x03,
-  0xff, 0x14, 0xA1
+  0xff,   // JAM_CRC
+  0x14,   // EOP
+  0xA1    // TXON
 };
 
 
@@ -78,27 +81,19 @@ void setup() {
   Wire.write(0x41);
   Wire.endTransmission();
   FUSB302BMPX.OpenAllPower();
-  
-  DP__INTERRUPTA INTERRUPTA = FUSB302BMPX.GetInteruptA();
-  Serial.printf("INTERRUPTA:\t%s\n", getBitString(*(u_int8_t*)&INTERRUPTA).c_str());
-  DP__INTERRUPTB INTERRUPTB = FUSB302BMPX.GetInteruptB();
-  Serial.printf("INTERRUPTB:\t%s\n", getBitString(*(u_int8_t*)&INTERRUPTB).c_str());
-  DP__INTERRUPT INTERRUPT_ = FUSB302BMPX.GetInterupt();
-  Serial.printf("INTERRUPT_:\t%s\n", getBitString(*(u_int8_t*)&INTERRUPT_).c_str());
-
-
+  FUSB302BMPX.ClearFIFO_Rx();
 }
 
 void loop() {
   u_int8_t FIFO;
   DP__HEADER_SOP PD_Header;
   FUSB302BMPX.GetMemeryData(&FIFO, ADDR_FIFOs);
-  // Serial.printf("FIFO:\t%s\n", getBitString(FIFO).c_str());
+  memset(FIFO_buffer, 0, sizeof(FIFO_buffer));
+  FIFO_Len = 0;
   FIFO_buffer[0] = FIFO & 0xE0;
-  // Serial.printf("FIFO_buffer[1]:\t%s\n", getBitString(FIFO_buffer[1]).c_str());
   if (FIFO_buffer[0] > 0x40) {
     if (FIFO_buffer[0] == 0b11100000) {
-      // Serial.printf(" SOP 訊息\n");
+      Serial.printf(" SOP 訊息\n");
     }
     else {
       Serial.printf(" 尚未定義的FIFO資訊\n");
@@ -108,40 +103,35 @@ void loop() {
     Wire.endTransmission();
     Wire.requestFrom(FUSB302BMPX_ADDR,2);
     Wire.readBytes(FIFO_buffer + 1, 2);
-    PD_Header.high_low.high = FIFO_buffer[1];
-    PD_Header.high_low.low = FIFO_buffer[2];
-    uint8_t i = 0;
-    // Serial.printf("Header:\t%s-%s\n", getBitString(FIFO_buffer[2]).c_str(), getBitString(FIFO_buffer[1]).c_str());
-    // Serial.printf("MessageType: %s\n", getBitString(PD_Header.parts.MessageType).c_str());
-    // Serial.printf("PortDataRole: %s\n", getBitString(PD_Header.parts.PortDataRole).c_str());
-    // Serial.printf("SpecificationReversio: %s\n", getBitString(PD_Header.parts.SpecificationReversio).c_str());
-    // Serial.printf("PortPowerRole: %s\n", getBitString(PD_Header.parts.PortPowerRole).c_str());
-    Serial.printf("MessageID: %d\t",(int)PD_Header.parts.MessageID);
-    Serial.printf("NumberOfDataObjects: %d\n", (int)PD_Header.parts.NumberOfDataObjects);
-    // Serial.printf("Extended: %s\n", getBitString(PD_Header.parts.Extended).c_str());
+    PD_Header.IndexSort.Index_1 = FIFO_buffer[1];
+    PD_Header.IndexSort.Index_2 = FIFO_buffer[2];
+    int ReadByteCount = PD_Header.parts.NumberOfDataObjects*4+2;
+    if (PD_Header.parts.NumberOfDataObjects != 0) {
+      Serial.printf("獲得 %d 組電壓設定, 合計需要讀取 %d 個Byte\n", PD_Header.parts.NumberOfDataObjects, ReadByteCount);
+      FIFO_Len = PD_Header.parts.NumberOfDataObjects + 5;
+      Wire.beginTransmission(FUSB302BMPX_ADDR);
+      Wire.write(ADDR_FIFOs);
+      Wire.endTransmission();
+      Wire.requestFrom(FUSB302BMPX_ADDR, ReadByteCount);
+      Wire.readBytes(FIFO_buffer+3, ReadByteCount);
+    }
+    else {
+      Wire.beginTransmission(FUSB302BMPX_ADDR);
+      Wire.write(ADDR_FIFOs);
+      Wire.endTransmission();
+      Wire.requestFrom(FUSB302BMPX_ADDR, 4);
+      Wire.readBytes(FIFO_buffer+3, 4);
+      Serial.println(getBitString(FIFO_buffer[3]));
+      Serial.println(getBitString(FIFO_buffer[4]));
+      Serial.println(getBitString(FIFO_buffer[5]));
+      Serial.println(getBitString(FIFO_buffer[6]));
+    }
+    //! 清除FIFO Rx
+    FUSB302BMPX.ClearFIFO_Rx();
     
-    // i = FIFO_buffer[2] % 0x70;
-    // Serial.printf("FIFO_buffer[2]: %d, ", i);
-    // i >>= 2;
-    Serial.printf("獲得 %d 組電壓設定, 合計需要讀取 %d 個Byte\n", PD_Header.parts.NumberOfDataObjects, PD_Header.parts.NumberOfDataObjects+2);
-    // i += 2;
-    FIFO_Len = PD_Header.parts.NumberOfDataObjects + 5;
-    Wire.beginTransmission(FUSB302BMPX_ADDR);
-    Wire.write(ADDR_FIFOs);
-    Wire.endTransmission();
-    Wire.requestFrom(FUSB302BMPX_ADDR, (int)PD_Header.parts.NumberOfDataObjects+2);
-    Wire.readBytes(FIFO_buffer+3, (int)PD_Header.parts.NumberOfDataObjects+2);
-    
-    //! 清除
-    Wire.beginTransmission(FUSB302BMPX_ADDR);
-    Wire.write(0x07);  
-    Wire.write(0x04);
-    Wire.endTransmission();
-    
-    // // uint16_t V_set = 0;
     DP__FIFO_I_SET I_set;
     DP__FIFO_V_SET V_set;
-    for (int setChose = 0;setChose<(i-2)/4;setChose++) {
+    for (int setChose = 0;setChose<PD_Header.parts.NumberOfDataObjects;setChose++) {
       uint8_t A_set = FIFO_buffer[4*setChose + 3];
       uint8_t B_set = FIFO_buffer[4*setChose + 4];
       uint8_t C_set = FIFO_buffer[4*setChose + 5];
@@ -169,58 +159,117 @@ void loop() {
       }
     }
 
-    for (int i = 0;i < 14; i++) {
-      FIFO_TX_buffer[i] = PD_request[i];
-    }
-     
-
-
   }
 
 
-
-  u_int8_t test_i = 0;
   if (FIFO_Len >= 5) {
-    test_i = FIFO_buffer[2] & 0x70;
-    if (test_i == 0) {
-      Serial.println(" - 控制類消息");
-      test_i = FIFO_buffer[1] & 0x07;
-      switch (test_i)
-      {
-      case 1:
-        Serial.println("   : CRC 較驗無問題");
-        break;
-      case 3:
-        Serial.println("   : 給電端接受了受電端的要求");
-        break;
-      case 4:
-        Serial.println("   : 給電端拒絕了受電端的要求");
-        break;
-      case 6:
-        Serial.println("   : 請求的電壓已準備完成");
-        break;
-      case 8:
-        Serial.println("   : 還不知道要幹嘛");
-        vTaskDelay(1/portTICK_PERIOD_MS);
-        break;
-      default:
-        Serial.printf("   : 未知狀態: %d \n", test_i);
-        break;
-      }
-    }
-    else {
-      Serial.println(" - 數據類消息");
-      Serial.printf("test:\t%s\n", getBitString(FIFO_buffer[1]).c_str());
-      test_i = FIFO_buffer[1] & 0x07;
-      Serial.println(test_i);
-      if ((int)test_i == (int)0x01) {
-        Serial.printf("充店頭支持功能\n");
-      }
-    }
+    FUSB302BMPX.HeaderResp(PD_Header);
+
+    // if (PD_Header.parts.NumberOfDataObjects == 0) {
+    //   Serial.println(" - 控制類消息");
+    //   switch (PD_Header.parts.MessageType)
+    //   {
+    //   case 1:
+    //     Serial.println("   : CRC 較驗無問題");
+    //     break;
+    //   case 3:
+    //     Serial.println("   : 給電端接受了受電端的要求");
+    //     break;
+    //   case 4:
+    //     Serial.println("   : 給電端拒絕了受電端的要求");
+    //     break;
+    //   case 6:
+    //     Serial.println("   : 請求的電壓已準備完成");
+    //     break;
+    //   case 8:
+    //     Serial.println("   : 獲取对方耗电的需求");
+    //     vTaskDelay(1/portTICK_PERIOD_MS);
+    //     break;
+    //   default:
+    //     Serial.printf("   : 未知狀態: %d \n", PD_Header.parts.MessageType);
+    //     break;
+    //   }
+    // }
+    // else {
+    //   Serial.println(" - 數據類消息");
+    //   switch (PD_Header.parts.MessageType)
+    //   {
+    //   case 1:
+    //     Serial.println("   : 供電方給予供電能力訊息");
+    //     break;
+    //   default:
+    //     Serial.printf("   : 未知狀態: %d \n", PD_Header.parts.MessageType);
+    //     break;
+    //   }
+      // Serial.printf("test:\t%s\n", getBitString(FIFO_buffer[1]).c_str());
+      // Serial.println(PD_Header.parts.MessageType);
+      // if ((int)test_i == (int)0x01) {
+      //   Serial.printf("充店頭支持功能\n");
+      // }
+    // }
   }
 
 
-  delay(1*100);
+  delay(1*1000);
+  
+  //! 清空 FIFO TX
+  Wire.beginTransmission(FUSB302BMPX_ADDR);
+  Wire.write(0x06);
+  Wire.write(0x40);
+  Wire.endTransmission();
+
+
+  // DP__REQUEST__POWER data;
+  // data.I_Set = 200;
+  // data.V_Set = 100;
+
+  // uint8_t *ptr = (uint8_t *)&data;
+  // // Wire.beginTransmission(FUSB302BMPX_ADDR);
+  // // Wire.write(0x43);
+  // Serial.println("---------------");
+  // for (int i = 0; i < sizeof(DP__REQUEST__POWER); ++i) {
+  //   // Wire.write(ptr[i]);
+  //   Serial.printf("0x%02X\n", ptr[i]);
+  // }
+  // Serial.println("---------------");
+
+  // Wire.beginTransmission(FUSB302BMPX_ADDR);
+  // Wire.write(0x43);
+  // Wire.write(0x12);
+  // Wire.write(0x12);
+  // Wire.write(0x12);
+  // Wire.write(0x13);
+  // Wire.write(0x86);
+  // Wire.write(0x42); //0b01 0 00010
+  // Wire.write(0x10); //0b0 001 010 0  0 001 000 0
+  // Wire.write(0x2C);
+  // Wire.write(0xB1);
+  // Wire.write(0x04);
+  // Wire.write(0x43);
+  // Wire.write(0xff);
+  // Wire.write(0x14);
+  // Wire.write(0xA1);
+  // Wire.endTransmission();
+
+  Wire.beginTransmission(FUSB302BMPX_ADDR);
+  Wire.write(0x43);
+  Wire.write(0x12);
+  Wire.write(0x12);
+  Wire.write(0x12);
+  Wire.write(0x13);
+  Wire.write(0x82);
+  Wire.write(0b01000001); //0b01000111
+  Wire.write(0b00000000); //0b00000000 
+  Wire.write(0xff);
+  Wire.write(0x14);
+  Wire.write(0xA1);
+  Wire.endTransmission();
+
+
+  // Wire.beginTransmission(FUSB302BMPX_ADDR);
+  // Wire.write(0x06);
+  // Wire.write(0x05);
+  // Wire.endTransmission();
 
   // FUSB302BMPX.ResetI2CSetting();
   // FUSB302BMPX.MeasureCCs();
@@ -258,22 +307,27 @@ void loop() {
   // Serial.printf("MASKB:\t%s\n", getBitString(*(u_int8_t*)&MASKB).c_str());
   // DP__CONTROL4 CONTROL4 = FUSB302BMPX.GetControl4();
   // Serial.printf("CONTROL4:\t%s\n", getBitString(*(u_int8_t*)&CONTROL4).c_str());
-  // DP__STATUS0A STATUS0A = FUSB302BMPX.GetStatus0A();
-  // Serial.printf("STATUS0A:\t%s\n", getBitString(*(u_int8_t*)&STATUS0A).c_str());
-  // DP__STATUS1A STATUS1A = FUSB302BMPX.GetStatus1A();
-  // Serial.printf("STATUS1A:\t%s\n", getBitString(*(u_int8_t*)&STATUS1A).c_str());
+  DP__STATUS0A STATUS0A = FUSB302BMPX.GetStatus0A();
+  Serial.printf("STATUS0A:\t%s\n", getBitString(*(u_int8_t*)&STATUS0A).c_str());
+  DP__STATUS1A STATUS1A = FUSB302BMPX.GetStatus1A();
+  Serial.printf("STATUS1A:\t%s\n", getBitString(*(u_int8_t*)&STATUS1A).c_str());
   // DP__INTERRUPTA INTERRUPTA = FUSB302BMPX.GetInteruptA();
   // Serial.printf("INTERRUPTA:\t%s\n", getBitString(*(u_int8_t*)&INTERRUPTA).c_str());
   // DP__INTERRUPTB INTERRUPTB = FUSB302BMPX.GetInteruptB();
   // Serial.printf("INTERRUPTB:\t%s\n", getBitString(*(u_int8_t*)&INTERRUPTB).c_str());
-  // DP__STATUS0 STATUS0 = FUSB302BMPX.GetStatus0();
-  // Serial.printf("STATUS0:\t%s\n", getBitString(*(u_int8_t*)&STATUS0).c_str());
-  // DP__STATUS1 STATUS1 = FUSB302BMPX.GetStatus1();
-  // Serial.printf("STATUS1:\t%s\n", getBitString(*(u_int8_t*)&STATUS1).c_str());
+  DP__STATUS0 STATUS0 = FUSB302BMPX.GetStatus0();
+  Serial.printf("STATUS0:\t%s\n", getBitString(*(u_int8_t*)&STATUS0).c_str());
+  DP__STATUS1 STATUS1 = FUSB302BMPX.GetStatus1();
+  Serial.printf("STATUS1:\t%s\n", getBitString(*(u_int8_t*)&STATUS1).c_str());
   // DP__INTERRUPT INTERRUPT_ = FUSB302BMPX.GetInterupt();
   // Serial.printf("INTERRUPT_:\t%s\n", getBitString(*(u_int8_t*)&INTERRUPT_).c_str());
 
-  
+  DP__INTERRUPTA INTERRUPTA = FUSB302BMPX.GetInteruptA();
+  Serial.printf("INTERRUPTA:\t%s\n", getBitString(*(u_int8_t*)&INTERRUPTA).c_str());
+  DP__INTERRUPTB INTERRUPTB = FUSB302BMPX.GetInteruptB();
+  Serial.printf("INTERRUPTB:\t%s\n", getBitString(*(u_int8_t*)&INTERRUPTB).c_str());
+  DP__INTERRUPT INTERRUPT_ = FUSB302BMPX.GetInterupt();
+  Serial.printf("INTERRUPT_:\t%s\n", getBitString(*(u_int8_t*)&INTERRUPT_).c_str());
   // delay(60*1000);
   // i2c_scanner();
 }

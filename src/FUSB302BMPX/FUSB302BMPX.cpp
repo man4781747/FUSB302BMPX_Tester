@@ -175,6 +175,96 @@ DP__INTERRUPT C_FUSB302BMPX::GetInterupt()
   return data;
 }
 
+void C_FUSB302BMPX::HeaderResp(DP__HEADER_SOP header)
+{
+  
+  Serial.printf(
+    "(%d)[%s][%s][%s]",
+    header.parts.MessageID,
+    header.parts.PortDataRole==0?"Sink":"Source",
+    header.parts.SpecificationReversio==0?"1.0":"2.0",
+    header.parts.PortDataRole==0?"UFP":"DFP"
+  );
+  if (header.parts.NumberOfDataObjects == 0) {
+    //! 控制類消息
+    Serial.printf("[CTRL]");
+    switch (header.parts.MessageType)
+    {
+    case 0:
+      break;
+    case 1:
+      Serial.printf("[GoodCRC]\t收到消息的應答");
+      break;
+    case 2:
+      Serial.printf("[GotoMin]\t供電調整至最小");
+      break;
+    case 3:
+      Serial.printf("[Accept]\t接收到對方的請求");
+      break;
+    case 4:
+      Serial.printf("[Accept]\t拒絕對方的請求");
+      break;
+    case 5:
+      Serial.printf("[Ping]\tPING");
+      break;
+    case 6:
+      Serial.printf("[PS_RDY]\t供電已準備完成");
+      break;
+    case 7:
+      Serial.printf("[Get_Source_Cap]\t获取对方的供电能力消息");
+      break;
+    case 8:
+      Serial.printf("[Get_Sink_Cap]獲取对方耗电的需求");
+      break;
+    case 12:
+      Serial.printf("[Wait] Wait ");
+      break;
+    case 13:
+      Serial.printf("[Soft_Reset]");
+      break;
+    case 14:
+      Serial.printf("[Data_Reset_Complete]");
+      break;
+    case 15:
+      Serial.printf("[Not_Supported]");
+      break;
+    default:
+      Serial.printf("[未知狀態] %d \n", header.parts.MessageType);
+      break;
+    }
+  }
+  else {
+    Serial.printf("[DATA]");
+    switch (header.parts.MessageType) {
+    case 0:
+      break;
+    case 1:
+      Serial.printf("[Source_Capabilities]\t供电方的供电能力信息");
+
+      break;
+    case 2:
+      Serial.printf("[Request]\t请求供电");
+      break;
+    case 3:
+      Serial.printf("[BIST]\tBIST ");
+      break;
+    case 4:
+      Serial.printf("[Sink_Capabilities]\t耗电方的耗电需求信息");
+      break;
+    case 5:
+      Serial.printf("[Battery_Status]");
+      break;
+    case 6:
+      Serial.printf("[Alert]");
+      break;
+    default:
+      Serial.printf("[未知狀態] %d \n", header.parts.MessageType);
+      break;
+    }
+  }
+  Serial.println();
+}
+
 void C_FUSB302BMPX::EnableTXCC()
 {
   DP__RESET RESET = GetReset();
@@ -235,6 +325,14 @@ void C_FUSB302BMPX::ResetI2CSetting()
   Wire_->beginTransmission(FUSB302BMPX_ADDR);
   Wire_->write(ADDR_Reset);
   Wire_->write(*(u_int8_t*)&RESET);
+  Wire_->endTransmission();
+}
+
+void C_FUSB302BMPX::ClearFIFO_Rx()
+{
+  Wire_->beginTransmission(FUSB302BMPX_ADDR);
+  Wire_->write(0x07);  
+  Wire_->write(0x04);
   Wire_->endTransmission();
 }
 
