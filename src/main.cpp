@@ -76,11 +76,17 @@ void setup() {
 void loop() {
   FUSB302BMPX.CheckINTERRUPT();
   FUSB302BMPX.ReadFIFO();
-  // DP__INTERRUPTB INTERRUPTB = FUSB302BMPX.GetInteruptB();
-  // if (INTERRUPTB.I_GCRCSENT) {
   if (FUSB302BMPX.newestFIFO_HEADER_SOP.parts.MessageType != 0) {
-    // Serial.printf("[%d]Good CRC 回應已發送\n", millis());
-    if (FUSB302BMPX.newestFIFO_HEADER_SOP.parts.MessageType == MSG_Source_Capabilities & FUSB302BMPX.newestFIFO_HEADER_SOP.parts.NumberOfDataObjects != 0) {
+    if (
+      FUSB302BMPX.newestFIFO_HEADER_SOP.parts.MessageType == 1 & 
+      FUSB302BMPX.newestFIFO_HEADER_SOP.parts.NumberOfDataObjects == 0
+    ) {
+      Serial.println("收到 Good CRC");
+    }
+    else if (
+      FUSB302BMPX.newestFIFO_HEADER_SOP.parts.MessageType == MSG_Source_Capabilities & 
+      FUSB302BMPX.newestFIFO_HEADER_SOP.parts.NumberOfDataObjects != 0
+    ) {
       Serial.printf("[%d]獲得的是供電能力資料\n", millis());
       //! 需盡快送出Request
       if (FUSB302BMPX.SourceapAbilityChose == -1) {
@@ -165,7 +171,7 @@ void loop() {
 
   // if (FUSB302BMPX.SourceapAbilityList.size() == 0) {
   //   Serial.printf("[%d]電源端供電能力無紀錄，準備重新索取\n", millis());
-  //   vTaskDelay(1000);
+  //   vTaskDelay(1000/portTICK_PERIOD_MS);
   //   DP__HEADER_SOP RxTest;
   //   RxTest.parts.Extended = 0;
   //   RxTest.parts.MessageType = 0b00111;
@@ -194,45 +200,12 @@ void loop() {
   //   Wire.write(0xA1);
   //   Wire.endTransmission();
   //   FUSB302BMPX.AddMSD();
+  //   vTaskDelay(100/portTICK_PERIOD_MS);
   // }
 
   if (digitalRead(0) == LOW) {
     vTaskDelay(1000/portTICK_PERIOD_MS);
     Serial.printf("[%d]準備發出供電能力請求\n", millis());
-    // DP__HEADER_SOP RxTest;
-    // RxTest.parts.Extended = 0;
-    // RxTest.parts.MessageType = 0b00010;
-    // RxTest.parts.NumberOfDataObjects = 1;   //! 這邊填的是給出的資料數(個數，不是Byte數)
-    // RxTest.parts.PortDataRole = 0;
-    // RxTest.parts.SpecificationReversio = 0b01;
-    // RxTest.parts.PortPowerRole = 0;
-    // RxTest.parts.MessageID = FUSB302BMPX.MSG_ID;
-
-    // // ! 清空 FIFO TX
-    // Wire.beginTransmission(FUSB302BMPX_ADDR);
-    // Wire.write(0x06);
-    // Wire.write(0x40);
-    // Wire.endTransmission();
-    // Wire.beginTransmission(FUSB302BMPX_ADDR);
-    // Wire.write(0x43);
-    // Wire.write(0x12);
-    // Wire.write(0x12);
-    // Wire.write(0x12);
-    // Wire.write(0x13);
-    // Wire.write(0x80 + (RxTest.parts.NumberOfDataObjects*4+2));
-    // Wire.write(RxTest.IndexSort.Index_1); //0b01 0 00010
-    // Wire.write(RxTest.IndexSort.Index_2); //0b0 001 010 0  0 001 000 0
-    // Wire.write(0x2C);
-    // Wire.write(0xB1);
-    // Wire.write(0x04);
-    // Wire.write(0x43);
-    // Wire.write(0xff);
-    // Wire.write(0x14);
-    // Wire.write(0xA1);
-    // Wire.endTransmission();
-    // FUSB302BMPX.AddMSD();
-    
-
     DP__HEADER_SOP RxTest;
     RxTest.parts.Extended = 0;
     RxTest.parts.MessageType = 0b00111;

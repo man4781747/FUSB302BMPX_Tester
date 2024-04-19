@@ -379,7 +379,7 @@ void C_FUSB302BMPX::CheckINTERRUPT()
     // Wire_->endTransmission();
 
 
-    // SendHardReset();
+    SendHardReset();
     // ResetI2CSetting();
     // OpenAllAutoRetry();
     // OpenUsefulInterrupt();
