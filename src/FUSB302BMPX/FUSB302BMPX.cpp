@@ -316,12 +316,12 @@ void C_FUSB302BMPX::CheckINTERRUPT()
   Wire_->beginTransmission(FUSB302BMPX_ADDR);
   Wire_->write(ADDR_Interrupta);
   Wire_->endTransmission();
-  Wire_->requestFrom(FUSB302BMPX_ADDR, 2);
-  Wire_->readBytes(buffer, 2);
+  Wire_->requestFrom(FUSB302BMPX_ADDR, 1);
+  Wire_->readBytes(buffer, 1);
   DP__INTERRUPTA INTERRUPTA;
   *(u_int8_t*)&INTERRUPTA = buffer[0];
-  DP__INTERRUPTB INTERRUPTB;
-  *(u_int8_t*)&INTERRUPTB = buffer[1];
+  // DP__INTERRUPTB INTERRUPTB;
+  // *(u_int8_t*)&INTERRUPTB = buffer[1];
   // DP__INTERRUPT INTERRUPT_;
   // *(u_int8_t*)&INTERRUPT_ = buffer[ADDR_Interrupt - ADDR_Status0a];
 
@@ -330,26 +330,26 @@ void C_FUSB302BMPX::CheckINTERRUPT()
   DP__INTERRUPT INTERRUPT_ = FUSB302BMPX.GetInterupt();
   unsigned long datatime = millis();
   if (INTERRUPTA.I_SOFTRST) {
-    Serial.printf("[%d]收到軟體重製需求\n", datatime);
+    Serial.printf("[%d][INTERRUPT]收到軟體重製需求\n", datatime);
     // ResetI2CSetting();
   }
   if (INTERRUPTA.I_TXSENT) {
-    Serial.printf("[%d]發出的消息已收到GoodCRC回應\n", datatime);
+    Serial.printf("[%d][INTERRUPT]發出的消息已收到GoodCRC回應\n", datatime);
   }
   if (INTERRUPTA.I_HARDSENT) {
-    Serial.printf("成功發送硬體重製\n");
+    Serial.printf("[INTERRUPT]成功發送硬體重製\n");
   }
   if (INTERRUPTA.I_RETRYFAIL) {
-    Serial.printf("RETRY失敗\n");
+    Serial.printf("[INTERRUPT]RETRY失敗\n");
   }
   if (INTERRUPTA.I_SOFTFAIL) {
-    Serial.printf("SOFT RESET 失敗\n");
+    Serial.printf("[INTERRUPT]SOFT RESET 失敗\n");
   }
-  if (INTERRUPTB.I_GCRCSENT) {
-    Serial.printf("[%d]Good CRC 回應已發送\n", datatime);
-  }
+  // if (INTERRUPTB.I_GCRCSENT) {
+  //   Serial.printf("[%d][INTERRUPT]Good CRC 回應已發送\n", datatime);
+  // }
   if (INTERRUPT_.I_VBUSOK) {
-    Serial.printf("[%d]偵測到VBUS電壓躍遷至 4.5V\n", datatime);
+    Serial.printf("[%d][INTERRUPT]偵測到VBUS電壓躍遷至 4.5V\n", datatime);
   }
   if (INTERRUPT_.I_ACTIVITY) {
     // Serial.printf("CC 總線的 ACTIVITY 值發生變化\n");
@@ -370,7 +370,7 @@ void C_FUSB302BMPX::CheckINTERRUPT()
     // Serial.printf("主機請求的電流等級發生變化\n");
   }
   if (INTERRUPTA.I_HARDRST) {
-    Serial.printf("[%d]收到硬體重製需求\n", datatime);
+    Serial.printf("[%d][INTERRUPT]收到硬體重製需求\n", datatime);
     // DP__CONTROL3 CONTROL3 = FUSB302BMPX.GetControl3();
     // CONTROL3.SEND_HARD_RESET = 1;
     // Wire_->beginTransmission(FUSB302BMPX_ADDR);
@@ -419,30 +419,37 @@ void C_FUSB302BMPX::CheckINTERRUPT()
 DP__FIFO_Rx_Info C_FUSB302BMPX::ReadFIFO()
 {
   u_int8_t FIFO_buffer[40] = {0};
-  // DP__FIFO_Rx_Info* FIFO_Rx_Info = new DP__FIFO_Rx_Info;
-  // DP__FIFO_Rx_Info FIFO_Rx_Info;
-  // DP__HEADER_SOP* PD_Header = new DP__HEADER_SOP;
-  // DP__HEADER_SOP PD_Header;
-  // Serial.println(sizeof(PD_Header));
-  // Serial.println(sizeof(DP__HEADER_SOP));
-  // newestFIFO_Rx_Info.header = 
   newestFIFO_Rx_Info.header = newestFIFO_HEADER_SOP;
   u_int8_t FIFO;
   GetMemeryData(&FIFO, ADDR_FIFOs);
   FIFO_Len = 0;
   FIFO_buffer[0] = FIFO & 0xE0;
   if (FIFO_buffer[0] > 0x40) {
+
     newestFIFO_Rx_Info.SOP_Type = FIFO_buffer[0] >> 5;
     Wire.beginTransmission(FUSB302BMPX_ADDR);
     Wire.write(ADDR_FIFOs);
     Wire.endTransmission();
     Wire.requestFrom(FUSB302BMPX_ADDR,2);
-    Wire.readBytes(FIFO_buffer + 1, 2);
+    Wire.readBytes(FIFO_buffer + 1, 2); 
+    newestFIFO_HEADER_SOP.value = 0;
     newestFIFO_HEADER_SOP.IndexSort.Index_1 = FIFO_buffer[1];
-    newestFIFO_HEADER_SOP.IndexSort.Index_2 = FIFO_buffer[2];
+    newestFIFO_HEADER_SOP.IndexSort.Index_2 = FIFO_buffer[2];;
+    uint16_t test = newestFIFO_HEADER_SOP.value;
+    // Serial.printf("[%d]收到 Header: ", millis());
+    // for (int i = 0; i < 16; i++) {
+    //   bool b = test & 0x8000;
+    //   if (b) {
+    //     Serial.printf("1");
+    //   } else {
+    //     Serial.printf("0");
+    //   }
+    //   test = test << 1;
+    // }
+    // Serial.println();
     int ReadByteCount = newestFIFO_HEADER_SOP.parts.NumberOfDataObjects*4+2;
     if (newestFIFO_HEADER_SOP.parts.NumberOfDataObjects != 0) {
-      // Serial.printf("獲得 %d 組電壓設定, 合計需要讀取 %d 個Byte\n", PD_Header.parts.NumberOfDataObjects, ReadByteCount);
+      Serial.printf("[%d]獲得 %d 組資料, 合計需要讀取 %d 個Byte\n", millis(), newestFIFO_HEADER_SOP.parts.NumberOfDataObjects, ReadByteCount);
       FIFO_Len = newestFIFO_HEADER_SOP.parts.NumberOfDataObjects + 5;
       Wire.beginTransmission(FUSB302BMPX_ADDR);
       Wire.write(ADDR_FIFOs);
@@ -451,21 +458,73 @@ DP__FIFO_Rx_Info C_FUSB302BMPX::ReadFIFO()
       Wire.readBytes(FIFO_buffer+3, ReadByteCount);
     }
     else {
-      Wire.beginTransmission(FUSB302BMPX_ADDR);
-      Wire.write(ADDR_FIFOs);
-      Wire.endTransmission();
-      Wire.requestFrom(FUSB302BMPX_ADDR, 4);
-      Wire.readBytes(FIFO_buffer+3, 4);
-      // Serial.println(getBitString(FIFO_buffer[3]));
-      // Serial.println(getBitString(FIFO_buffer[4]));
-      // Serial.println(getBitString(FIFO_buffer[5]));
-      // Serial.println(getBitString(FIFO_buffer[6]));    
+      // Wire.beginTransmission(FUSB302BMPX_ADDR);
+      // Wire.write(ADDR_FIFOs);
+      // Wire.endTransmission();
+      // Wire.requestFrom(FUSB302BMPX_ADDR, 2);
     }
+    // if (newestFIFO_HEADER_SOP.parts.MessageType == 1 & newestFIFO_HEADER_SOP.parts.NumberOfDataObjects == 0) {
+    //   //收到的是 Good CRC ， 忽略這筆
+    //   Serial.printf("[%d]收到的是 Good CRC ， 忽略這筆\n", millis());
+    //   GetMemeryData(&FIFO, ADDR_FIFOs);
+    //   Serial.println(FIFO);
+    //   GetMemeryData(&FIFO, ADDR_FIFOs);
+    //   Serial.println(FIFO);
+    //   GetMemeryData(&FIFO, ADDR_FIFOs);
+    //   Serial.println(FIFO);
+    //   GetMemeryData(&FIFO, ADDR_FIFOs);
+    //   Serial.println(FIFO);
+    //   GetMemeryData(&FIFO, ADDR_FIFOs);
+    //   Serial.println(FIFO);
+      
+    //   FIFO_Len = 0;
+    //   FIFO_buffer[0] = FIFO & 0xE0;
+    //   newestFIFO_Rx_Info.SOP_Type = FIFO_buffer[0] >> 5;
+    //   Wire.beginTransmission(FUSB302BMPX_ADDR);
+    //   Wire.write(ADDR_FIFOs);
+    //   Wire.endTransmission();
+    //   Wire.requestFrom(FUSB302BMPX_ADDR,2);
+    //   Wire.readBytes(FIFO_buffer + 1, 2); 
+    //   newestFIFO_HEADER_SOP.value = 0;
+    //   newestFIFO_HEADER_SOP.IndexSort.Index_1 = FIFO_buffer[1];
+    //   newestFIFO_HEADER_SOP.IndexSort.Index_2 = FIFO_buffer[2];;
+    //   uint16_t test = newestFIFO_HEADER_SOP.value;
+    //   Serial.printf("[%d]收到 Header: ", millis());
+    //   for (int i = 0; i < 16; i++) {
+    //     bool b = test & 0x8000;
+    //     if (b) {
+    //       Serial.printf("1");
+    //     } else {
+    //       Serial.printf("0");
+    //     }
+    //     test = test << 1;
+    //   }
+    //   Serial.println();
+    //   int ReadByteCount = newestFIFO_HEADER_SOP.parts.NumberOfDataObjects*4+2;
+    //   if (newestFIFO_HEADER_SOP.parts.NumberOfDataObjects != 0) {
+    //     Serial.printf("[%d]獲得 %d 組資料, 合計需要讀取 %d 個Byte\n", millis(), newestFIFO_HEADER_SOP.parts.NumberOfDataObjects, ReadByteCount);
+    //     FIFO_Len = newestFIFO_HEADER_SOP.parts.NumberOfDataObjects + 5;
+    //     Wire.beginTransmission(FUSB302BMPX_ADDR);
+    //     Wire.write(ADDR_FIFOs);
+    //     Wire.endTransmission();
+    //     Wire.requestFrom(FUSB302BMPX_ADDR, ReadByteCount);
+    //     Wire.readBytes(FIFO_buffer+3, ReadByteCount);
+    //   }
+    //   else {
+    //     Wire.beginTransmission(FUSB302BMPX_ADDR);
+    //     Wire.write(ADDR_FIFOs);
+    //     Wire.endTransmission();
+    //     Wire.requestFrom(FUSB302BMPX_ADDR, 2);
+    //   }
+    // }
+
+
     //! 清除FIFO Rx
     FUSB302BMPX.ClearFIFO_Rx();
     HeaderResp(newestFIFO_HEADER_SOP);
     if (newestFIFO_HEADER_SOP.parts.MessageType == MSG_Source_Capabilities) {
       newestFIFO_Rx_Info.SourceapabilityList.len = newestFIFO_HEADER_SOP.parts.NumberOfDataObjects;
+      SourceapAbilityList.clear();
       for (int setChose = 0;setChose<newestFIFO_HEADER_SOP.parts.NumberOfDataObjects;setChose++) {
         SourceapAbility ThisData;
         ThisData.type = 0;
@@ -473,65 +532,35 @@ DP__FIFO_Rx_Info C_FUSB302BMPX::ReadFIFO()
         ThisData.Fixed.bytes.index_B = FIFO_buffer[4*setChose + 4];
         ThisData.Fixed.bytes.index_C = FIFO_buffer[4*setChose + 5];
         ThisData.Fixed.bytes.index_D = FIFO_buffer[4*setChose + 6];
-        newestFIFO_Rx_Info.SourceapabilityList.list.push_back(ThisData);
+        // newestFIFO_Rx_Info.SourceapabilityList.list.push_back(ThisData);
+        SourceapAbilityList.push_back(ThisData);
       }
-      // for (int i=0;i<newestFIFO_Rx_Info.SourceapabilityList.len;i++) {
-      //   Serial.printf(
-      //     "  - [%d][%s][DRP:%d][Suspend:%d][UP:%d][USB Comm:%d][DRD:%d][Unchunked:%d][Peak:%d]\tV: %d V,\tMax I: %d mA\n", 
-      //     i, newestFIFO_Rx_Info.SourceapabilityList.list[i].Fixed.part.PDO_Type == 0b11?"PPS":"Fixed",
-      //     newestFIFO_Rx_Info.SourceapabilityList.list[i].Fixed.part.DRP,newestFIFO_Rx_Info.SourceapabilityList.list[i].Fixed.part.Suspend,
-      //     newestFIFO_Rx_Info.SourceapabilityList.list[i].Fixed.part.UP, newestFIFO_Rx_Info.SourceapabilityList.list[i].Fixed.part.USB_Comm,
-      //     newestFIFO_Rx_Info.SourceapabilityList.list[i].Fixed.part.DRD, newestFIFO_Rx_Info.SourceapabilityList.list[i].Fixed.part.Unchunked,
-      //     newestFIFO_Rx_Info.SourceapabilityList.list[i].Fixed.part.Peak, newestFIFO_Rx_Info.SourceapabilityList.list[i].Fixed.part.V*5/100, newestFIFO_Rx_Info.SourceapabilityList.list[i].Fixed.part.Max_I*10
-      //   );
-      // }
-
-
-      // DP__HEADER_SOP RxTest;
-      // RxTest.parts.Extended = 0;
-      // RxTest.parts.MessageType = 0b00010;
-      // RxTest.parts.NumberOfDataObjects = 6;
-      // RxTest.parts.PortDataRole = 0;
-      // RxTest.parts.SpecificationReversio = 0b00;
-      // RxTest.parts.PortPowerRole = 0;
-      // RxTest.parts.MessageID = FUSB302BMPX.MSG_ID;
-
-      // // Serial.printf("RxTest:\t%s %s\n", getBitString(RxTest.IndexSort.Index_2).c_str(), getBitString(RxTest.IndexSort.Index_1).c_str());
-      // Wire.beginTransmission(FUSB302BMPX_ADDR);
-      // Wire.write(0x06);
-      // Wire.write(0x40);
-      // Wire.endTransmission();
-      // Wire.beginTransmission(FUSB302BMPX_ADDR);
-      // Wire.write(0x43);
-      // Wire.write(0x12);
-      // Wire.write(0x12);
-      // Wire.write(0x12);
-      // Wire.write(0x13);
-      // Wire.write(0x86);
-      // Wire.write(RxTest.IndexSort.Index_1); //0b01 0 00010
-      // Wire.write(RxTest.IndexSort.Index_2); //0b0 001 010 0  0 001 000 0
-      // Wire.write(0x2C);
-      // Wire.write(0xB1);
-      // Wire.write(0x04);
-      // Wire.write(0x43);
-      // Wire.write(0xff);
-      // Wire.write(0x14);
-      // Wire.write(0xA1);
-      // Wire.endTransmission();
-      // FUSB302BMPX.AddMSD();
-
-
     }
-
-
-
   }
   else {
-    newestFIFO_Rx_Info.header.parts.MessageType = 0;
+    newestFIFO_HEADER_SOP.parts.MessageType = (unsigned int)0;
+    // Serial.println(newestFIFO_Rx_Info.parts.MessageType);
   }
   return newestFIFO_Rx_Info;
 }
 
+// PD協議重製 (雙方皆重製) 與FUSB302中的寄存器重製為預設值
+void C_FUSB302BMPX::ResetPDAndI2C()
+{
+  Wire.beginTransmission(FUSB302BMPX_ADDR);
+  Wire.write(ADDR_Reset);
+  Wire.write(0b00000011);
+  Wire.endTransmission();
+}
+
+// PD協議重製 (雙方皆重製)
+void C_FUSB302BMPX::PD_Reset()
+{
+  Wire.beginTransmission(FUSB302BMPX_ADDR);
+  Wire.write(ADDR_Reset);
+  Wire.write(0b00000010);
+  Wire.endTransmission();
+}
 
 void C_FUSB302BMPX::SendHardReset()
 {
@@ -653,7 +682,7 @@ int C_FUSB302BMPX::CheckCC()
     return 1;
   }
   if (MeasureCC2() != 0) {
-    return 1;
+    return 2;
   }
   return 0;
 }

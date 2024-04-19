@@ -38,6 +38,9 @@ class C_FUSB302BMPX
 
     void HeaderResp(DP__HEADER_SOP header);
 
+
+    void PD_Reset();
+    void ResetPDAndI2C();
     void SendHardReset(); //! 最高級別重製
     void ResetI2CSetting();
     void ClearFIFO_Rx();
@@ -54,6 +57,7 @@ class C_FUSB302BMPX
     void CheckINTERRUPT();
 
     DP__FIFO_Rx_Info ReadFIFO();
+    
 
     unsigned int MSG_ID = 0;
     void AddMSD(){
@@ -69,6 +73,10 @@ class C_FUSB302BMPX
     u_int8_t FIFO_buffer[40] = {0};
     int FIFO_Len;
     u_int8_t FIFO_TX_buffer[20] = {0};
+
+    std::vector<SourceapAbility> SourceapAbilityList;
+
+
   private:
     TwoWire *Wire_;
 };
