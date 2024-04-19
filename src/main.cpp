@@ -83,40 +83,83 @@ void loop() {
     if (FUSB302BMPX.newestFIFO_HEADER_SOP.parts.MessageType == MSG_Source_Capabilities & FUSB302BMPX.newestFIFO_HEADER_SOP.parts.NumberOfDataObjects != 0) {
       Serial.printf("[%d]獲得的是供電能力資料\n", millis());
       //! 需盡快送出Request
-      Serial.printf("[%d]準備發出請求\n", millis());
-      DP__HEADER_SOP RxTest;
-      RxTest.parts.Extended = 0;
-      RxTest.parts.MessageType = 0b00010;
-      RxTest.parts.NumberOfDataObjects = 1;   //! 這邊填的是給出的資料數(個數，不是Byte數)
-      RxTest.parts.PortDataRole = 0;
-      RxTest.parts.SpecificationReversio = 0b01;
-      RxTest.parts.PortPowerRole = 0;
-      RxTest.parts.MessageID = FUSB302BMPX.MSG_ID;
+      if (FUSB302BMPX.SourceapAbilityChose == -1) {
+        //! 到這邊代表沒有選定輸出電壓，預設要求 5V 1A 電源
+        Serial.printf("[%d]準備發出Default請求\n", millis());
+        DP__HEADER_SOP RxTest;
+        RxTest.parts.Extended = 0;
+        RxTest.parts.MessageType = 0b00010;
+        RxTest.parts.NumberOfDataObjects = 1;   //! 這邊填的是給出的資料數(個數，不是Byte數)
+        RxTest.parts.PortDataRole = 0;
+        RxTest.parts.SpecificationReversio = 0b01;
+        RxTest.parts.PortPowerRole = 0;
+        RxTest.parts.MessageID = FUSB302BMPX.MSG_ID;
+        uint8_t choseIndex;
+        for (int i = 0;i < FUSB302BMPX.SourceapAbilityList.size();i++) {
+          if (FUSB302BMPX.SourceapAbilityList[i].Fixed.part.V == 100) {
+            choseIndex = (i+1) << 4;
+            break;
+          }
+        }
 
-      // ! 清空 FIFO TX
-      Wire.beginTransmission(FUSB302BMPX_ADDR);
-      Wire.write(0x06);
-      Wire.write(0x40);
-      Wire.endTransmission();
-      Wire.beginTransmission(FUSB302BMPX_ADDR);
-      Wire.write(0x43);
-      Wire.write(0x12);
-      Wire.write(0x12);
-      Wire.write(0x12);
-      Wire.write(0x13);
-      Wire.write(0x80 + (RxTest.parts.NumberOfDataObjects*4+2));
-      Wire.write(RxTest.IndexSort.Index_1); //0b01 0 00010
-      Wire.write(RxTest.IndexSort.Index_2); //0b0 001 010 0  0 001 000 0
-      Wire.write(0x2C);
-      Wire.write(0xB1);
-      Wire.write(0x04);
-      Wire.write(0x43);
-      Wire.write(0xff);
-      Wire.write(0x14);
-      Wire.write(0xA1);
-      Wire.endTransmission();
-      FUSB302BMPX.AddMSD();
-      // vTaskDelay(100/portTICK_PERIOD_MS);
+        // ! 清空 FIFO TX
+        Wire.beginTransmission(FUSB302BMPX_ADDR);
+        Wire.write(0x06);
+        Wire.write(0x40);
+        Wire.endTransmission();
+        Wire.beginTransmission(FUSB302BMPX_ADDR);
+        Wire.write(0x43);
+        Wire.write(0x12);
+        Wire.write(0x12);
+        Wire.write(0x12);
+        Wire.write(0x13);
+        Wire.write(0x80 + (RxTest.parts.NumberOfDataObjects*4+2));
+        Wire.write(RxTest.IndexSort.Index_1);
+        Wire.write(RxTest.IndexSort.Index_2);
+        Wire.write(0b00101100);
+        Wire.write(0b10110001);
+        Wire.write(0b00000100);
+        Wire.write(choseIndex);
+        Wire.write(0xff);
+        Wire.write(0x14);
+        Wire.write(0xA1);
+        Wire.endTransmission();
+        FUSB302BMPX.AddMSD();
+      } else {
+        Serial.printf("[%d]準備發出請求\n", millis());
+        DP__HEADER_SOP RxTest;
+        RxTest.parts.Extended = 0;
+        RxTest.parts.MessageType = 0b00010;
+        RxTest.parts.NumberOfDataObjects = 1;   //! 這邊填的是給出的資料數(個數，不是Byte數)
+        RxTest.parts.PortDataRole = 0;
+        RxTest.parts.SpecificationReversio = 0b01;
+        RxTest.parts.PortPowerRole = 0;
+        RxTest.parts.MessageID = FUSB302BMPX.MSG_ID;
+
+        // ! 清空 FIFO TX
+        Wire.beginTransmission(FUSB302BMPX_ADDR);
+        Wire.write(0x06);
+        Wire.write(0x40);
+        Wire.endTransmission();
+        Wire.beginTransmission(FUSB302BMPX_ADDR);
+        Wire.write(0x43);
+        Wire.write(0x12);
+        Wire.write(0x12);
+        Wire.write(0x12);
+        Wire.write(0x13);
+        Wire.write(0x80 + (RxTest.parts.NumberOfDataObjects*4+2));
+        Wire.write(RxTest.IndexSort.Index_1);
+        Wire.write(RxTest.IndexSort.Index_2);
+        Wire.write(0x2C);  // 00101100
+        Wire.write(0xB1);  // 10110001
+        Wire.write(0x04);  // 00000100
+        Wire.write(0x43);  // 01000011
+        Wire.write(0xff);
+        Wire.write(0x14);
+        Wire.write(0xA1);
+        Wire.endTransmission();
+        FUSB302BMPX.AddMSD();
+      }
     }
   }
 

@@ -75,7 +75,7 @@ class C_FUSB302BMPX
     u_int8_t FIFO_TX_buffer[20] = {0};
 
     std::vector<SourceapAbility> SourceapAbilityList;
-
+    int SourceapAbilityChose = -1;
 
   private:
     TwoWire *Wire_;
