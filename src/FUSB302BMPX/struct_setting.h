@@ -4,6 +4,8 @@
 #ifndef __FUSB302BMPX_struct__H
 #define __FUSB302BMPX_struct__H
 
+#include <vector>
+
 #define FUSB302BMPX_ADDR 0x22
 #define ADDR_DEVICE_ID 0x01
 #define ADDR_Switches0 0x02
@@ -30,6 +32,8 @@
 #define ADDR_Interrupt 0x42
 #define ADDR_FIFOs     0x43
 
+#define MSG_Source_Capabilities 0b00001
+
 struct DP__DEVICE_ID {
   unsigned int Revision_ID : 2;
   unsigned int Product_ID : 2;
@@ -44,18 +48,23 @@ typedef union {
     uint16_t value;
 } DP__FIFO_I_SET;
 
+// size : 16
 typedef union {
     struct {
       // 低位
-      uint8_t MessageType : 5;
-      uint8_t PortDataRole : 1;
-      uint8_t SpecificationReversio : 2;
+
+      unsigned int MessageType : 5;
+      unsigned int PortDataRole : 1; //0b Sink耗电方, 1b Source供电方
+      unsigned int SpecificationReversio : 2;
+
       // 高位
       // 低位
-      uint8_t PortPowerRole : 1;
-      uint8_t MessageID : 3;
-      uint8_t NumberOfDataObjects : 3;
-      uint8_t Extended : 1;
+
+      unsigned int PortPowerRole : 1;
+      unsigned int MessageID : 3;
+      unsigned int NumberOfDataObjects : 3;
+      unsigned int Extended : 1;
+
       // 高位
     } parts;
     struct {
@@ -111,6 +120,19 @@ struct DP__V_SET {
   unsigned int high : 4;
   unsigned int low : 6;
 };
+
+struct DP__POWER_SET {
+  uint8_t PDO_Type : 2;
+  uint8_t DRP : 1;
+  uint8_t Suspend : 1;
+  uint8_t UP : 1;
+  uint8_t USB_Comm : 1;   
+  uint8_t DRD : 1;   
+  uint8_t Unchunked : 1; 
+  uint8_t Peak : 1;
+};
+
+
 
 /**
  * (Address: 02h; Reset Value: 0x0000_0011; Type: Read/Write)
@@ -563,4 +585,51 @@ struct DP__INTERRUPT {
   unsigned int I_VBUSOK : 1;
 };
 
+typedef struct {
+  unsigned int type; // 0: fixed
+  union {
+    struct {
+      union {
+        struct  {
+          // L
+          unsigned int Max_I : 10;
+          unsigned int V : 10;
+          unsigned int Unuse : 3;
+          unsigned int Peak : 1;
+          unsigned int Unchunked : 1; 
+          unsigned int DRD : 1;
+          unsigned int USB_Comm : 1; 
+          unsigned int UP : 1;
+          unsigned int Suspend : 1;
+          unsigned int DRP : 1;
+          unsigned int PDO_Type : 2;
+          // H
+        } part;
+        struct {
+          // L
+          uint8_t index_A;
+          uint8_t index_B;
+          uint8_t index_C;
+          uint8_t index_D;
+          // H
+        } bytes;
+        uint32_t value;
+      };
+    } Fixed;
+  };
+} SourceapAbility;
+
+// size : 8 + 16 + ?
+typedef struct {
+  uint8_t SOP_Type = 0;
+  DP__HEADER_SOP header;
+  // union {
+    struct {
+      unsigned int len;
+      std::vector<SourceapAbility> list;
+    } SourceapabilityList;
+  // };
+} DP__FIFO_Rx_Info;
+
 #endif
+

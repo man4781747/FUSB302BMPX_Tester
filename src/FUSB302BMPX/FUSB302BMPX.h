@@ -4,6 +4,8 @@
 #include "Wire.h"
 #include "struct_setting.h"
 
+
+
 class C_FUSB302BMPX 
 {
   public:
@@ -48,6 +50,25 @@ class C_FUSB302BMPX
     void MeasureCCs();
     void EnableAutoCRC();
     void EnableTXCC();
+
+    void CheckINTERRUPT();
+
+    DP__FIFO_Rx_Info ReadFIFO();
+
+    unsigned int MSG_ID = 0;
+    void AddMSD(){
+      MSG_ID++;
+      if (MSG_ID > 7) {
+        MSG_ID = 0;
+      }
+    };
+
+    DP__FIFO_Rx_Info newestFIFO_Rx_Info;
+    DP__HEADER_SOP newestFIFO_HEADER_SOP;
+
+    u_int8_t FIFO_buffer[40] = {0};
+    int FIFO_Len;
+    u_int8_t FIFO_TX_buffer[20] = {0};
   private:
     TwoWire *Wire_;
 };
